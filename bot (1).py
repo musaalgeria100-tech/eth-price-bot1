@@ -10,8 +10,12 @@ import io
 import threading
 
 BOT_TOKEN = "8531688617:AAGp1iQHCWPPunWCljBeUb5EhodyfDDPIzY"
-INTERVAL = 1 * 60
+
+# ✅ $10 আপ/ডাউন হলে alert
+PRICE_THRESHOLD = 10
+
 subscribers = set()
+last_alert_price = None  # ✅ শেষবার কত ডলারে alert গেছে সেটা মনে রাখবে
 
 
 def get_updates(offset=None):
@@ -38,7 +42,7 @@ def listen_for_users():
                     subscribers.add(chat_id)
                     send_message(chat_id,
                         "✅ <b>সাবস্ক্রাইব করা হয়েছে!</b>\n"
-                        "প্রতি 1 মিনিটে ETH প্রাইস আপডেট পাবেন। 🚀\n\n"
+                        "ETH প্রতি $10 আপ/ডাউন হলে আপডেট পাবেন। 🚀\n\n"
                         "বন্ধ করতে /stop পাঠান।"
                     )
                     print(f"✅ নতুন subscriber: {chat_id}")
@@ -129,7 +133,6 @@ def send_photo_with_caption(chat_id, photo_buf, caption):
     requests.post(url, files=files, data=data, timeout=20)
 
 
-# ✅ শুধু এই ফাংশনটা বদলেছি
 def format_caption(price_data):
     usd = price_data["usd"]
     change_24h = price_data["usd_24h_change"]
@@ -138,33 +141,53 @@ def format_caption(price_data):
 
 
 def main():
+    global last_alert_price  # ✅ global variable ব্যবহার করছি
+
     print("✅ ETH Price Bot চালু হয়েছে!")
+    print(f"📊 প্রতি ${PRICE_THRESHOLD} আপ/ডাউনে alert যাবে")
 
     t = threading.Thread(target=listen_for_users, daemon=True)
     t.start()
 
     while True:
-        if subscribers:
-            try:
-                print(f"📡 {len(subscribers)} জনকে পাঠাচ্ছি...")
-                price_data = get_eth_price()
-                times, values = get_eth_chart_data()
-                caption = format_caption(price_data)
+        try:
+            price_data = get_eth_price()
+            current_price = price_data["usd"]
 
-                for chat_id in list(subscribers):
-                    try:
-                        chart = create_chart(times, values, price_data["usd"], price_data["usd_24h_change"])
-                        send_photo_with_caption(chat_id, chart, caption)
-                    except Exception as e:
-                        print(f"❌ {chat_id} তে পাঠাতে ব্যর্থ: {e}")
+            # ✅ প্রথমবার চালু হলে current price সেট করো
+            if last_alert_price is None:
+                last_alert_price = current_price
+                print(f"📌 শুরুর দাম সেট হয়েছে: ${current_price:,.0f}")
 
-                print("✅ সবাইকে পাঠানো হয়েছে!")
-            except Exception as e:
-                print(f"❌ ত্রুটি: {e}")
-        else:
-            print("⏳ কোনো subscriber নেই, অপেক্ষা করছি...")
+            price_diff = abs(current_price - last_alert_price)
+            print(f"💹 Current: ${current_price:,.0f} | Last Alert: ${last_alert_price:,.0f} | Diff: ${price_diff:.1f}")
 
-        time.sleep(INTERVAL)
+            # ✅ $10 বা বেশি পরিবর্তন হলে alert পাঠাও
+            if price_diff >= PRICE_THRESHOLD:
+                if subscribers:
+                    print(f"🚨 ${price_diff:.0f} পরিবর্তন! {len(subscribers)} জনকে alert পাঠাচ্ছি...")
+                    times, values = get_eth_chart_data()
+                    caption = format_caption(price_data)
+
+                    for chat_id in list(subscribers):
+                        try:
+                            chart = create_chart(times, values, current_price, price_data["usd_24h_change"])
+                            send_photo_with_caption(chat_id, chart, caption)
+                        except Exception as e:
+                            print(f"❌ {chat_id} তে পাঠাতে ব্যর্থ: {e}")
+
+                    last_alert_price = current_price  # ✅ নতুন দাম সেট করো
+                    print(f"✅ Alert পাঠানো হয়েছে! নতুন base price: ${current_price:,.0f}")
+                else:
+                    # subscriber না থাকলেও price update রাখো
+                    last_alert_price = current_price
+                    print("⏳ কোনো subscriber নেই, price update করা হয়েছে।")
+
+        except Exception as e:
+            print(f"❌ ত্রুটি: {e}")
+
+        # ✅ প্রতি 30 সেকেন্ডে price চেক করবে
+        time.sleep(30)
 
 
 if __name__ == "__main__":

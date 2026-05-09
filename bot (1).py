@@ -9,18 +9,12 @@ from datetime import datetime, timedelta
 import io
 import threading
 
-# ✅ শুধু BOT_TOKEN বসান, CHAT_ID আর লাগবে না
 BOT_TOKEN = "8531688617:AAGp1iQHCWPPunWCljBeUb5EhodyfDDPIzY"
-
-# ⏱️ 9 মিনিট পর পর আপডেট
-INTERVAL = 9 * 60
-
-# সব subscriber এর chat_id রাখবে
+INTERVAL = 1 * 60
 subscribers = set()
 
 
 def get_updates(offset=None):
-    """নতুন /start মেসেজ চেক করে"""
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/getUpdates"
     params = {"timeout": 10, "offset": offset}
     try:
@@ -31,7 +25,6 @@ def get_updates(offset=None):
 
 
 def listen_for_users():
-    """Background এ চলবে — নতুন /start ধরবে"""
     offset = None
     while True:
         updates = get_updates(offset)
@@ -45,7 +38,7 @@ def listen_for_users():
                     subscribers.add(chat_id)
                     send_message(chat_id,
                         "✅ <b>সাবস্ক্রাইব করা হয়েছে!</b>\n"
-                        "প্রতি 9 মিনিটে ETH প্রাইস আপডেট পাবেন। 🚀\n\n"
+                        "প্রতি 1 মিনিটে ETH প্রাইস আপডেট পাবেন। 🚀\n\n"
                         "বন্ধ করতে /stop পাঠান।"
                     )
                     print(f"✅ নতুন subscriber: {chat_id}")
@@ -136,29 +129,17 @@ def send_photo_with_caption(chat_id, photo_buf, caption):
     requests.post(url, files=files, data=data, timeout=20)
 
 
+# ✅ শুধু এই ফাংশনটা বদলেছি
 def format_caption(price_data):
     usd = price_data["usd"]
-    bdt = price_data["bdt"]
     change_24h = price_data["usd_24h_change"]
-    arrow = "🟢 ▲" if change_24h >= 0 else "🔴 ▼"
-    time_now = datetime.now().strftime("%d %b %Y, %I:%M %p")
-    return (
-        f"⚡ <b>Ethereum (ETH) Price Update</b>\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"💵 USD: <b>${usd:,.2f}</b>\n"
-        f"🇧🇩 BDT: <b>৳{bdt:,.0f}</b>\n"
-        f"📊 ২৪ঘণ্টার পরিবর্তন: {arrow} {abs(change_24h):.2f}%\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"🕐 {time_now}\n"
-        f"━━━━━━━━━━━━━━━━\n"
-        f"🛠 Made By @tmmad1"
-    )
+    arrow = "🟢" if change_24h >= 0 else "🔴"
+    return f'{arrow} ${usd:,.0f} <a href="https://t.me/tmmad1">@eth_price</a>'
 
 
 def main():
     print("✅ ETH Price Bot চালু হয়েছে!")
 
-    # Background এ user listener চালু করো
     t = threading.Thread(target=listen_for_users, daemon=True)
     t.start()
 
@@ -188,4 +169,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
